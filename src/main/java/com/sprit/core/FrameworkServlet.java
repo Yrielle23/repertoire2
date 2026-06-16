@@ -1,3 +1,4 @@
+
 package com.sprit.core;
 
 import jakarta.servlet.http.HttpServlet;
@@ -6,9 +7,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-public class FrameworkServlet extends HttpServlet {
-    
-    @Override
+public class FrameworkServlet extends HttpServlet {<ll
+       @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) 
             throws IOException {
         
@@ -30,7 +30,7 @@ public class FrameworkServlet extends HttpServlet {
         out.println("<p>URL : " + uri + "</p>");
         out.println("<p>Méthode : " + method + "</p>");
         out.println("<hr>");
-        out.println("<p><i>INON N MIOVA COTER FRAMWORK</i></p>");
+        out.println("<p><i>SPRIT Framework</i></p>");
         out.println("</body>");
         out.println("</html>");
     }
