@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🔨 Compilation du framework SPRIT..."
+echo " Compilation du framework SPRIT..."
 
 # 1. Nettoyage
 rm -rf build/classes/*
