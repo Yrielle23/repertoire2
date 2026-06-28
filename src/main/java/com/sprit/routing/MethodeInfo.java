@@ -24,6 +24,10 @@ public class MethodeInfo {
 
     public void invoke(HttpServletRequest req, HttpServletResponse resp)
             throws InvocationTargetException, IllegalAccessException {
+        // Sprint3b: exécution de la méthode du contrôleur trouvée par le mapping (URL + méthode).
+        // Cette méthode invoque la méthode reflectée du contrôleur.
+        // Si la méthode prend deux paramètres, on transmet `HttpServletRequest` et
+        // `HttpServletResponse` au handler ; sinon on invoque sans arguments.
         if (action.getParameterCount() == 2) {
             action.invoke(controller, req, resp);
         } else {
