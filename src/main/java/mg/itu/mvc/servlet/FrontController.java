@@ -10,6 +10,7 @@ import mg.itu.mvc.annotation.Controller;
 import mg.itu.mvc.annotation.Url;
 import mg.itu.mvc.bind.ParameterBinder;
 import mg.itu.mvc.file.FileUpload;
+import mg.itu.mvc.session.Session;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -19,7 +20,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@WebServlet(name = "frontController", urlPatterns = {"/", "/upload"}, loadOnStartup = 1)
+//  N'oublie pas d'ajouter tes nouvelles routes ici (session-set, session-get, etc.)
+@WebServlet(name = "frontController", urlPatterns = {
+    "/", 
+    "/upload", 
+    "/session-set", 
+    "/session-get"
+}, loadOnStartup = 1)
 @MultipartConfig(
     fileSizeThreshold = 1024 * 1024,       // 1 Mo
     maxFileSize       = 20L * 1024 * 1024, // 20 Mo
@@ -34,6 +41,7 @@ public class FrontController extends HttpServlet {
     @Override
     public void init() throws ServletException {
         try {
+            // Liste des contrôleurs à scanner
             List<Class<?>> controllers = List.of(
                 Class.forName("mg.itu.controller.UploadController")
             );
@@ -76,6 +84,7 @@ public class FrontController extends HttpServlet {
 
             for (int i = 0; i < params.length; i++) {
                 Parameter p = params[i];
+                
                 if (p.getType().equals(FileUpload.class)) {
                     args[i] = ParameterBinder.bindFileUpload(req, p);
                 } else if (p.getType().equals(String.class)) {
@@ -84,6 +93,9 @@ public class FrontController extends HttpServlet {
                     args[i] = req;
                 } else if (p.getType().equals(HttpServletResponse.class)) {
                     args[i] = resp;
+                } else if (p.getType().equals(Session.class)) {
+                    // ⭐ INJECTION DE LA SESSION ICI
+                    args[i] = new Session(req.getSession());
                 }
             }
 
