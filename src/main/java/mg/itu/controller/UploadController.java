@@ -1,5 +1,6 @@
 package mg.itu.controller;
 
+import mg.itu.mvc.annotation.AuthRequired;
 import mg.itu.mvc.annotation.Controller;
 import mg.itu.mvc.annotation.Url;
 import mg.itu.mvc.file.FileUpload;
@@ -40,6 +41,23 @@ public class UploadController {
     public String getSession(Session session) {
         Object user = session.get("utilisateur");
         System.out.println(">>> TEST GET : L'utilisateur récupéré est " + user + " <<<");
+        return "/WEB-INF/vues/resultat.jsp";
+    }
+
+    // --- SPRINT 10 : Tests d'Authentification ---
+
+    @Url(value = "/admin", method = "GET")
+    @AuthRequired // ⭐ Cette méthode nécessite d'être connecté
+    public String pageAdmin(Session session) {
+        System.out.println(">>> Accès autorisé à la page admin pour : " + session.get("utilisateur") + " <<<");
+        return "/WEB-INF/vues/resultat.jsp";
+    }
+
+    // ⭐ Route bonus pour tester la déconnexion
+    @Url(value = "/logout", method = "GET")
+    public String logout(Session session) {
+        session.invalidate(); // Détruit la session
+        System.out.println(">>> TEST LOGOUT : Session détruite <<<");
         return "/WEB-INF/vues/resultat.jsp";
     }
 }

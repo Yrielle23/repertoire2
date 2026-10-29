@@ -6,6 +6,7 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import mg.itu.mvc.annotation.AuthRequired;
 import mg.itu.mvc.annotation.Controller;
 import mg.itu.mvc.annotation.Url;
 import mg.itu.mvc.bind.ParameterBinder;
@@ -24,7 +25,9 @@ import java.util.Map;
     "/", 
     "/upload", 
     "/session-set", 
-    "/session-get"
+    "/session-get",
+    "/admin",  // ⭐ Nouvelle route
+    "/logout"  // ⭐ Nouvelle route
 }, loadOnStartup = 1)
 @MultipartConfig(
     fileSizeThreshold = 1024 * 1024,       // 1 Mo
@@ -35,7 +38,7 @@ public class FrontController extends HttpServlet {
 
     private final Map<String, Route> routes = new HashMap<>();
     
-
+    // ⭐ Gestion du Singleton : on stocke une seule instance par classe
     private final Map<Class<?>, Object> controllersInstances = new HashMap<>();
 
     private record Route(Object controller, Method method) {}
@@ -43,7 +46,7 @@ public class FrontController extends HttpServlet {
     @Override
     public void init() throws ServletException {
         try {
-
+            // Liste des contrôleurs à scanner
             List<Class<?>> controllers = List.of(
                 Class.forName("mg.itu.controller.UploadController")
             );
@@ -51,6 +54,7 @@ public class FrontController extends HttpServlet {
             for (Class<?> c : controllers) {
                 if (!c.isAnnotationPresent(Controller.class)) continue;
 
+                // ⭐ Vérification d'instance (Singleton)
                 Object instance;
                 if (controllersInstances.containsKey(c)) {
                     instance = controllersInstances.get(c);
@@ -86,6 +90,7 @@ public class FrontController extends HttpServlet {
             return;
         }
 
+        // Variable pour garder la référence de la session et faire le commit à la fin
         Session sessionObj = null; 
 
         try {
@@ -105,18 +110,34 @@ public class FrontController extends HttpServlet {
                 } else if (p.getType().equals(HttpServletResponse.class)) {
                     args[i] = resp;
                 } else if (p.getType().equals(Session.class)) {
+                    // ⭐ INJECTION DE LA SESSION
                     sessionObj = new Session(req.getSession());
                     args[i] = sessionObj;
+                }
+            }
+
+            // ⭐ SPRINT 10 : VÉRIFICATION DE L'AUTHENTIFICATION
+            if (method.isAnnotationPresent(AuthRequired.class)) {
+                // On regarde dans la vraie HttpSession (qui a été mise à jour par le commit du Sprint 9)
+                Object user = req.getSession().getAttribute("utilisateur");
+                
+                if (user == null) {
+                    System.out.println("⛔ Accès refusé : utilisateur non connecté.");
+                    // Redirection vers l'accueil
+                    resp.sendRedirect(req.getContextPath() + "/"); 
+                    return; // On arrête l'exécution ici
                 }
             }
 
             // Appel de la méthode du contrôleur
             Object retour = method.invoke(route.controller(), args);
 
+            // ⭐ APRÈS L'INVOKE : On met à jour l'HTTP session via la boucle du commit
             if (sessionObj != null) {
                 sessionObj.commit();
             }
 
+            // Gestion du retour (Vue ou Redirection)
             if (retour instanceof String view && view.startsWith("/WEB-INF/")) {
                 req.getRequestDispatcher(view).forward(req, resp);
             } else if (retour instanceof String redirect && redirect.startsWith("redirect:")) {
@@ -127,6 +148,7 @@ public class FrontController extends HttpServlet {
             Throwable cause = e.getCause();
             cause.printStackTrace();
             
+            // On commit quand même la session en cas d'erreur
             if (sessionObj != null) sessionObj.commit(); 
             
             resp.setContentType("text/plain;charset=UTF-8");
