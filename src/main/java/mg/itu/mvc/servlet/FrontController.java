@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-//  N'oublie pas d'ajouter tes nouvelles routes ici (session-set, session-get, etc.)
 @WebServlet(name = "frontController", urlPatterns = {
     "/", 
     "/upload", 
@@ -35,13 +34,16 @@ import java.util.Map;
 public class FrontController extends HttpServlet {
 
     private final Map<String, Route> routes = new HashMap<>();
+    
+
+    private final Map<Class<?>, Object> controllersInstances = new HashMap<>();
 
     private record Route(Object controller, Method method) {}
 
     @Override
     public void init() throws ServletException {
         try {
-            // Liste des contrôleurs à scanner
+
             List<Class<?>> controllers = List.of(
                 Class.forName("mg.itu.controller.UploadController")
             );
@@ -49,7 +51,14 @@ public class FrontController extends HttpServlet {
             for (Class<?> c : controllers) {
                 if (!c.isAnnotationPresent(Controller.class)) continue;
 
-                Object instance = c.getDeclaredConstructor().newInstance();
+                Object instance;
+                if (controllersInstances.containsKey(c)) {
+                    instance = controllersInstances.get(c);
+                } else {
+                    instance = c.getDeclaredConstructor().newInstance();
+                    controllersInstances.put(c, instance);
+                    System.out.println("Singleton créé : " + c.getSimpleName());
+                }
 
                 for (Method m : c.getDeclaredMethods()) {
                     Url url = m.getAnnotation(Url.class);
@@ -77,6 +86,8 @@ public class FrontController extends HttpServlet {
             return;
         }
 
+        Session sessionObj = null; 
+
         try {
             Method method = route.method();
             Parameter[] params = method.getParameters();
@@ -94,12 +105,17 @@ public class FrontController extends HttpServlet {
                 } else if (p.getType().equals(HttpServletResponse.class)) {
                     args[i] = resp;
                 } else if (p.getType().equals(Session.class)) {
-                    // ⭐ INJECTION DE LA SESSION ICI
-                    args[i] = new Session(req.getSession());
+                    sessionObj = new Session(req.getSession());
+                    args[i] = sessionObj;
                 }
             }
 
+            // Appel de la méthode du contrôleur
             Object retour = method.invoke(route.controller(), args);
+
+            if (sessionObj != null) {
+                sessionObj.commit();
+            }
 
             if (retour instanceof String view && view.startsWith("/WEB-INF/")) {
                 req.getRequestDispatcher(view).forward(req, resp);
@@ -110,6 +126,9 @@ public class FrontController extends HttpServlet {
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
             cause.printStackTrace();
+            
+            if (sessionObj != null) sessionObj.commit(); 
+            
             resp.setContentType("text/plain;charset=UTF-8");
             resp.sendError(500, "Erreur dans le contrôleur : " + cause.toString());
         } catch (Exception e) {
