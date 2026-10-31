@@ -1,6 +1,7 @@
 package mg.itu.controller;
 
 import mg.itu.mvc.annotation.Controller;
+import mg.itu.mvc.annotation.Role;
 import mg.itu.mvc.annotation.Url;
 import mg.itu.mvc.file.FileUpload;
 import mg.itu.mvc.session.Session;
@@ -21,23 +22,27 @@ public class UploadController {
         return "/WEB-INF/vues/resultat.jsp";
     }
 
-    @Url(value = "/session", method = "GET")
-    public String sessionPage() {
-        return "/WEB-INF/vues/session.jsp";
-    }
-
-    @Url(value = "/session/login", method = "POST")
-    public String connecter(String nom, Session session) {
-        if (nom == null || nom.isBlank()) {
-            return "/WEB-INF/vues/session.jsp";
-        }
-        session.connect(nom);
+    @Url(value = "/login-admin", method = "GET")
+    public String loginAdmin(Session session) {
+        session.connect("admin");
         return "redirect:/session";
     }
 
-    @Url(value = "/session/logout", method = "POST")
-    public String deconnecter(Session session) {
-        session.disconnect();
+    @Url(value = "/login-user", method = "GET")
+    public String loginUser(Session session) {
+        session.connect("user");
         return "redirect:/session";
+    }
+
+    @Url(value = "/admin-only", method = "GET")
+    @Role("ADMIN")
+    public String adminOnly(Session session) {
+        return "/WEB-INF/vues/resultat.jsp";
+    }
+
+    @Url(value = "/user-space", method = "GET")
+    @Role({"USER", "ADMIN"})
+    public String userSpace(Session session) {
+        return "/WEB-INF/vues/resultat.jsp";
     }
 }

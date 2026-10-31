@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import mg.itu.mvc.annotation.Controller;
+import mg.itu.mvc.annotation.Role;
 import mg.itu.mvc.annotation.Url;
 import mg.itu.mvc.bind.ParameterBinder;
 import mg.itu.mvc.file.FileUpload;
@@ -19,15 +20,12 @@ import java.lang.reflect.Parameter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @WebServlet(name = "frontController", urlPatterns = {
-    "/", 
-    "/upload", 
-    "/session-set", 
-    "/session-get",
-    "/session",
-    "/session/login",
-    "/session/logout"
+    "/", "/upload", "/session-set", "/session-get", "/admin", "/logout",
+    "/login-admin", "/login-user", "/admin-only", "/user-space",
+    "/session", "/session/login", "/session/logout"
 }, loadOnStartup = 1)
 @MultipartConfig(
     fileSizeThreshold = 1024 * 1024,
@@ -85,8 +83,14 @@ public class FrontController extends HttpServlet {
             return;
         }
 
+        Method method = route.method();
+
+        if (!hasRequiredRole(req, method)) {
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Accès refusé : rôle utilisateur insuffisant");
+            return;
+        }
+
         try {
-            Method method = route.method();
             Parameter[] params = method.getParameters();
             Object[] args = new Object[params.length];
 
@@ -122,5 +126,34 @@ public class FrontController extends HttpServlet {
             e.printStackTrace();
             resp.sendError(500, "Erreur framework : " + e.toString());
         }
+    }
+
+    private boolean hasRequiredRole(HttpServletRequest request, Method method) {
+        Role methodRole = method.getAnnotation(Role.class);
+        Role classRole = method.getDeclaringClass().getAnnotation(Role.class);
+        Role requiredRole = methodRole != null ? methodRole : classRole;
+
+        if (requiredRole == null) {
+            return true;
+        }
+
+        Set<String> configuredRoles = Session.getConfiguredRoles(getServletContext());
+        boolean roleConfigured = false;
+        for (String role : requiredRole.value()) {
+            if (role != null && configuredRoles.contains(role.trim().toUpperCase(java.util.Locale.ROOT))) {
+                roleConfigured = true;
+                break;
+            }
+        }
+        if (!roleConfigured) {
+            return false;
+        }
+
+        Session session = new Session(request);
+        if (session.getUser() == null) {
+            return false;
+        }
+
+        return session.hasAnyRole(getServletContext(), requiredRole.value());
     }
 }
