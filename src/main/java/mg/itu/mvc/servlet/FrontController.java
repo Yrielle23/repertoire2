@@ -24,18 +24,19 @@ import java.util.Map;
     "/", 
     "/upload", 
     "/session-set", 
-    "/session-get"
+    "/session-get",
+    "/session",
+    "/session/login",
+    "/session/logout"
 }, loadOnStartup = 1)
 @MultipartConfig(
-    fileSizeThreshold = 1024 * 1024,       // 1 Mo
-    maxFileSize       = 20L * 1024 * 1024, // 20 Mo
-    maxRequestSize    = 25L * 1024 * 1024  // 25 Mo
+    fileSizeThreshold = 1024 * 1024,
+    maxFileSize       = 20L * 1024 * 1024,
+    maxRequestSize    = 25L * 1024 * 1024
 )
 public class FrontController extends HttpServlet {
 
     private final Map<String, Route> routes = new HashMap<>();
-    
-
     private final Map<Class<?>, Object> controllersInstances = new HashMap<>();
 
     private record Route(Object controller, Method method) {}
@@ -43,29 +44,27 @@ public class FrontController extends HttpServlet {
     @Override
     public void init() throws ServletException {
         try {
-
             List<Class<?>> controllers = List.of(
-                Class.forName("mg.itu.controller.UploadController")
+                Class.forName("mg.itu.controller.UploadController"),
+                Class.forName("mg.itu.controller.TestController")
             );
 
             for (Class<?> c : controllers) {
                 if (!c.isAnnotationPresent(Controller.class)) continue;
 
-                Object instance;
-                if (controllersInstances.containsKey(c)) {
-                    instance = controllersInstances.get(c);
-                } else {
-                    instance = c.getDeclaredConstructor().newInstance();
-                    controllersInstances.put(c, instance);
-                    System.out.println("Singleton créé : " + c.getSimpleName());
-                }
+                Object instance = controllersInstances.computeIfAbsent(c, k -> {
+                    try {
+                        return k.getDeclaredConstructor().newInstance();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
 
                 for (Method m : c.getDeclaredMethods()) {
                     Url url = m.getAnnotation(Url.class);
                     if (url == null) continue;
                     String key = url.method().toUpperCase() + " " + url.value();
                     routes.put(key, new Route(instance, m));
-                    System.out.println("Route enregistrée : " + key);
                 }
             }
         } catch (Exception e) {
@@ -86,8 +85,6 @@ public class FrontController extends HttpServlet {
             return;
         }
 
-        Session sessionObj = null; 
-
         try {
             Method method = route.method();
             Parameter[] params = method.getParameters();
@@ -105,17 +102,11 @@ public class FrontController extends HttpServlet {
                 } else if (p.getType().equals(HttpServletResponse.class)) {
                     args[i] = resp;
                 } else if (p.getType().equals(Session.class)) {
-                    sessionObj = new Session(req.getSession());
-                    args[i] = sessionObj;
+                    args[i] = new Session(req);
                 }
             }
 
-            // Appel de la méthode du contrôleur
             Object retour = method.invoke(route.controller(), args);
-
-            if (sessionObj != null) {
-                sessionObj.commit();
-            }
 
             if (retour instanceof String view && view.startsWith("/WEB-INF/")) {
                 req.getRequestDispatcher(view).forward(req, resp);
@@ -126,14 +117,9 @@ public class FrontController extends HttpServlet {
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
             cause.printStackTrace();
-            
-            if (sessionObj != null) sessionObj.commit(); 
-            
-            resp.setContentType("text/plain;charset=UTF-8");
             resp.sendError(500, "Erreur dans le contrôleur : " + cause.toString());
         } catch (Exception e) {
             e.printStackTrace();
-            resp.setContentType("text/plain;charset=UTF-8");
             resp.sendError(500, "Erreur framework : " + e.toString());
         }
     }

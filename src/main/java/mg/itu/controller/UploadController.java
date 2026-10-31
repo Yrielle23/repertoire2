@@ -16,30 +16,28 @@ public class UploadController {
     @Url(value = "/upload", method = "POST")
     public String saluer(FileUpload filemap) {
         if (filemap == null || filemap.getContent() == null) {
-            System.out.println("Aucun fichier reçu.");
             return "/WEB-INF/vues/resultat.jsp";
         }
-        
-        System.out.println("Reçu: " + filemap.getFileName()
-                + " (" + filemap.getContent().length + " octets, ."
-                + filemap.getExtension() + ")");
-                
         return "/WEB-INF/vues/resultat.jsp";
     }
 
-    // --- SPRINT 9 : Tests de Session ---
-
-    @Url(value = "/session-set", method = "GET")
-    public String setSession(Session session) {
-        session.set("utilisateur", "Yrielle");
-        System.out.println(">>> TEST SET : Session créée pour " + session.get("utilisateur") + " <<<");
-        return "/WEB-INF/vues/resultat.jsp";
+    @Url(value = "/session", method = "GET")
+    public String sessionPage() {
+        return "/WEB-INF/vues/session.jsp";
     }
 
-    @Url(value = "/session-get", method = "GET")
-    public String getSession(Session session) {
-        Object user = session.get("utilisateur");
-        System.out.println(">>> TEST GET : L'utilisateur récupéré est " + user + " <<<");
-        return "/WEB-INF/vues/resultat.jsp";
+    @Url(value = "/session/login", method = "POST")
+    public String connecter(String nom, Session session) {
+        if (nom == null || nom.isBlank()) {
+            return "/WEB-INF/vues/session.jsp";
+        }
+        session.connect(nom);
+        return "redirect:/session";
+    }
+
+    @Url(value = "/session/logout", method = "POST")
+    public String deconnecter(Session session) {
+        session.disconnect();
+        return "redirect:/session";
     }
 }
