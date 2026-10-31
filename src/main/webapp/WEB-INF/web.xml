@@ -7,4 +7,14 @@
 
     <display-name>lcsfw</display-name>
 
+    <context-param>
+        <param-name>roles</param-name>
+        <param-value>USER,ADMIN</param-value>
+    </context-param>
+
+    <context-param>
+        <param-name>user-roles</param-name>
+        <param-value>admin=ADMIN;user=USER</param-value>
+    </context-param>
+
 </web-app>

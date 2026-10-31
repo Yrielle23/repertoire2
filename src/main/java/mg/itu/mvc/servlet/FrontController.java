@@ -6,8 +6,8 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import mg.itu.mvc.annotation.AuthRequired;
 import mg.itu.mvc.annotation.Controller;
+import mg.itu.mvc.annotation.Role;
 import mg.itu.mvc.annotation.Url;
 import mg.itu.mvc.bind.ParameterBinder;
 import mg.itu.mvc.file.FileUpload;
@@ -20,25 +20,21 @@ import java.lang.reflect.Parameter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @WebServlet(name = "frontController", urlPatterns = {
-    "/", 
-    "/upload", 
-    "/session-set", 
-    "/session-get",
-    "/admin",  // ⭐ Nouvelle route
-    "/logout"  // ⭐ Nouvelle route
+    "/", "/upload", "/session-set", "/session-get", "/admin", "/logout",
+    "/login-admin", "/login-user", "/admin-only", "/user-space",
+    "/session", "/session/login", "/session/logout"
 }, loadOnStartup = 1)
 @MultipartConfig(
-    fileSizeThreshold = 1024 * 1024,       // 1 Mo
-    maxFileSize       = 20L * 1024 * 1024, // 20 Mo
-    maxRequestSize    = 25L * 1024 * 1024  // 25 Mo
+    fileSizeThreshold = 1024 * 1024,
+    maxFileSize       = 20L * 1024 * 1024,
+    maxRequestSize    = 25L * 1024 * 1024
 )
 public class FrontController extends HttpServlet {
 
     private final Map<String, Route> routes = new HashMap<>();
-    
-    // ⭐ Gestion du Singleton : on stocke une seule instance par classe
     private final Map<Class<?>, Object> controllersInstances = new HashMap<>();
 
     private record Route(Object controller, Method method) {}
@@ -46,7 +42,6 @@ public class FrontController extends HttpServlet {
     @Override
     public void init() throws ServletException {
         try {
-            // Liste des contrôleurs à scanner
             List<Class<?>> controllers = List.of(
                 Class.forName("mg.itu.controller.UploadController")
             );
@@ -54,26 +49,23 @@ public class FrontController extends HttpServlet {
             for (Class<?> c : controllers) {
                 if (!c.isAnnotationPresent(Controller.class)) continue;
 
-                // ⭐ Vérification d'instance (Singleton)
-                Object instance;
-                if (controllersInstances.containsKey(c)) {
-                    instance = controllersInstances.get(c);
-                } else {
-                    instance = c.getDeclaredConstructor().newInstance();
-                    controllersInstances.put(c, instance);
-                    System.out.println("Singleton créé : " + c.getSimpleName());
-                }
+                Object instance = controllersInstances.computeIfAbsent(c, k -> {
+                    try {
+                        return k.getDeclaredConstructor().newInstance();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
 
                 for (Method m : c.getDeclaredMethods()) {
                     Url url = m.getAnnotation(Url.class);
                     if (url == null) continue;
                     String key = url.method().toUpperCase() + " " + url.value();
                     routes.put(key, new Route(instance, m));
-                    System.out.println("Route enregistrée : " + key);
                 }
             }
         } catch (Exception e) {
-            throw new ServletException("Échec init FrontController", e);
+            throw new ServletException("Echec init FrontController", e);
         }
     }
 
@@ -85,22 +77,33 @@ public class FrontController extends HttpServlet {
         String key = req.getMethod().toUpperCase() + " " + path;
 
         Route route = routes.get(key);
+        if (route == null && path.startsWith("/")) {
+            String strippedPath = path.replaceFirst("^/[^/]+", "");
+            if (!strippedPath.equals(path)) {
+                String fallbackKey = req.getMethod().toUpperCase() + " " + (strippedPath.isEmpty() ? "/" : strippedPath);
+                route = routes.get(fallbackKey);
+            }
+        }
         if (route == null) {
             resp.sendError(404, "Aucune action pour : " + key);
             return;
         }
 
-        // Variable pour garder la référence de la session et faire le commit à la fin
-        Session sessionObj = null; 
+        Method method = route.method();
+
+        if (!hasRequiredRole(req, method)) {
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Accès refusé : rôle utilisateur insuffisant");
+            return;
+        }
+
+        Session sessionObj = null;
 
         try {
-            Method method = route.method();
             Parameter[] params = method.getParameters();
             Object[] args = new Object[params.length];
 
             for (int i = 0; i < params.length; i++) {
                 Parameter p = params[i];
-                
                 if (p.getType().equals(FileUpload.class)) {
                     args[i] = ParameterBinder.bindFileUpload(req, p);
                 } else if (p.getType().equals(String.class)) {
@@ -110,34 +113,17 @@ public class FrontController extends HttpServlet {
                 } else if (p.getType().equals(HttpServletResponse.class)) {
                     args[i] = resp;
                 } else if (p.getType().equals(Session.class)) {
-                    // ⭐ INJECTION DE LA SESSION
                     sessionObj = new Session(req.getSession());
                     args[i] = sessionObj;
                 }
             }
 
-            // ⭐ SPRINT 10 : VÉRIFICATION DE L'AUTHENTIFICATION
-            if (method.isAnnotationPresent(AuthRequired.class)) {
-                // On regarde dans la vraie HttpSession (qui a été mise à jour par le commit du Sprint 9)
-                Object user = req.getSession().getAttribute("utilisateur");
-                
-                if (user == null) {
-                    System.out.println("⛔ Accès refusé : utilisateur non connecté.");
-                    // Redirection vers l'accueil
-                    resp.sendRedirect(req.getContextPath() + "/"); 
-                    return; // On arrête l'exécution ici
-                }
-            }
-
-            // Appel de la méthode du contrôleur
             Object retour = method.invoke(route.controller(), args);
 
-            // ⭐ APRÈS L'INVOKE : On met à jour l'HTTP session via la boucle du commit
             if (sessionObj != null) {
                 sessionObj.commit();
             }
 
-            // Gestion du retour (Vue ou Redirection)
             if (retour instanceof String view && view.startsWith("/WEB-INF/")) {
                 req.getRequestDispatcher(view).forward(req, resp);
             } else if (retour instanceof String redirect && redirect.startsWith("redirect:")) {
@@ -147,16 +133,40 @@ public class FrontController extends HttpServlet {
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
             cause.printStackTrace();
-            
-            // On commit quand même la session en cas d'erreur
-            if (sessionObj != null) sessionObj.commit(); 
-            
-            resp.setContentType("text/plain;charset=UTF-8");
+            if (sessionObj != null) sessionObj.commit();
             resp.sendError(500, "Erreur dans le contrôleur : " + cause.toString());
         } catch (Exception e) {
             e.printStackTrace();
-            resp.setContentType("text/plain;charset=UTF-8");
             resp.sendError(500, "Erreur framework : " + e.toString());
         }
+    }
+
+    private boolean hasRequiredRole(HttpServletRequest request, Method method) {
+        Role methodRole = method.getAnnotation(Role.class);
+        Role classRole = method.getDeclaringClass().getAnnotation(Role.class);
+        Role requiredRole = methodRole != null ? methodRole : classRole;
+
+        if (requiredRole == null) {
+            return true;
+        }
+
+        Set<String> configuredRoles = Session.getConfiguredRoles(getServletContext());
+        boolean roleConfigured = false;
+        for (String role : requiredRole.value()) {
+            if (role != null && configuredRoles.contains(role.trim().toUpperCase(java.util.Locale.ROOT))) {
+                roleConfigured = true;
+                break;
+            }
+        }
+        if (!roleConfigured) {
+            return false;
+        }
+
+        Session session = new Session(request.getSession());
+        if (session.getUser() == null) {
+            return false;
+        }
+
+        return session.hasAnyRole(getServletContext(), requiredRole.value());
     }
 }
