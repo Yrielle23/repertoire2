@@ -1,34 +1,27 @@
 <%@ page contentType="text/html;charset=UTF-8" %>
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>Session</title>
+    <meta charset="UTF-8">
+    <title>Session utilisateur</title>
 </head>
 <body>
-    <h1>Gestion de session</h1>
+    <h1>Session utilisateur</h1>
 
-    <%
-        String utilisateur = (String) session.getAttribute("utilisateur");
-        if (utilisateur != null && !utilisateur.isBlank()) {
-    %>
-        <p>Utilisateur connecté : <strong><%= utilisateur %></strong></p>
-        <form method="post" action="${pageContext.request.contextPath}/session/logout">
+    <% String nom = (String) session.getAttribute("mg.itu.mvc.session.Session.user"); %>
+    <% if (nom != null) { %>
+        <p>Utilisateur connecté : <strong><%= nom %></strong></p>
+        <form action="${pageContext.request.contextPath}/session/logout" method="post">
             <button type="submit">Se déconnecter</button>
         </form>
-    <%
-        } else {
-    %>
-        <form method="post" action="${pageContext.request.contextPath}/session/login">
-            <label for="nom">Nom :</label>
-            <input type="text" id="nom" name="nom" required>
+    <% } else { %>
+        <form action="${pageContext.request.contextPath}/session/login" method="post">
+            <label for="nom">Entrer votre nom :</label>
+            <input id="nom" name="nom" type="text" required>
             <button type="submit">Se connecter</button>
         </form>
-    <%
-        }
-    %>
+    <% } %>
 
-    <p>
-        <a href="${pageContext.request.contextPath}/">Retour à l'accueil</a>
-    </p>
+    <p><a href="${pageContext.request.contextPath}/">Retour à l'accueil</a></p>
 </body>
 </html>

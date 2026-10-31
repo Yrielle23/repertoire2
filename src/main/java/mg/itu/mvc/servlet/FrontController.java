@@ -7,7 +7,6 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import mg.itu.mvc.annotation.Controller;
-import mg.itu.mvc.annotation.Role;
 import mg.itu.mvc.annotation.Url;
 import mg.itu.mvc.bind.ParameterBinder;
 import mg.itu.mvc.file.FileUpload;
@@ -20,12 +19,15 @@ import java.lang.reflect.Parameter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @WebServlet(name = "frontController", urlPatterns = {
-    "/", "/upload", "/session-set", "/session-get", "/admin", "/logout",
-    "/login-admin", "/login-user", "/admin-only", "/user-space",
-    "/session", "/session/login", "/session/logout"
+    "/", 
+    "/upload", 
+    "/session-set", 
+    "/session-get",
+    "/session",
+    "/session/login",
+    "/session/logout"
 }, loadOnStartup = 1)
 @MultipartConfig(
     fileSizeThreshold = 1024 * 1024,
@@ -43,7 +45,8 @@ public class FrontController extends HttpServlet {
     public void init() throws ServletException {
         try {
             List<Class<?>> controllers = List.of(
-                Class.forName("mg.itu.controller.UploadController")
+                Class.forName("mg.itu.controller.UploadController"),
+                Class.forName("mg.itu.controller.TestController")
             );
 
             for (Class<?> c : controllers) {
@@ -65,7 +68,7 @@ public class FrontController extends HttpServlet {
                 }
             }
         } catch (Exception e) {
-            throw new ServletException("Echec init FrontController", e);
+            throw new ServletException("Échec init FrontController", e);
         }
     }
 
@@ -77,33 +80,19 @@ public class FrontController extends HttpServlet {
         String key = req.getMethod().toUpperCase() + " " + path;
 
         Route route = routes.get(key);
-        if (route == null && path.startsWith("/")) {
-            String strippedPath = path.replaceFirst("^/[^/]+", "");
-            if (!strippedPath.equals(path)) {
-                String fallbackKey = req.getMethod().toUpperCase() + " " + (strippedPath.isEmpty() ? "/" : strippedPath);
-                route = routes.get(fallbackKey);
-            }
-        }
         if (route == null) {
             resp.sendError(404, "Aucune action pour : " + key);
             return;
         }
 
-        Method method = route.method();
-
-        if (!hasRequiredRole(req, method)) {
-            resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Accès refusé : rôle utilisateur insuffisant");
-            return;
-        }
-
-        Session sessionObj = null;
-
         try {
+            Method method = route.method();
             Parameter[] params = method.getParameters();
             Object[] args = new Object[params.length];
 
             for (int i = 0; i < params.length; i++) {
                 Parameter p = params[i];
+                
                 if (p.getType().equals(FileUpload.class)) {
                     args[i] = ParameterBinder.bindFileUpload(req, p);
                 } else if (p.getType().equals(String.class)) {
@@ -113,16 +102,11 @@ public class FrontController extends HttpServlet {
                 } else if (p.getType().equals(HttpServletResponse.class)) {
                     args[i] = resp;
                 } else if (p.getType().equals(Session.class)) {
-                    sessionObj = new Session(req.getSession());
-                    args[i] = sessionObj;
+                    args[i] = new Session(req);
                 }
             }
 
             Object retour = method.invoke(route.controller(), args);
-
-            if (sessionObj != null) {
-                sessionObj.commit();
-            }
 
             if (retour instanceof String view && view.startsWith("/WEB-INF/")) {
                 req.getRequestDispatcher(view).forward(req, resp);
@@ -133,40 +117,10 @@ public class FrontController extends HttpServlet {
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
             cause.printStackTrace();
-            if (sessionObj != null) sessionObj.commit();
             resp.sendError(500, "Erreur dans le contrôleur : " + cause.toString());
         } catch (Exception e) {
             e.printStackTrace();
             resp.sendError(500, "Erreur framework : " + e.toString());
         }
-    }
-
-    private boolean hasRequiredRole(HttpServletRequest request, Method method) {
-        Role methodRole = method.getAnnotation(Role.class);
-        Role classRole = method.getDeclaringClass().getAnnotation(Role.class);
-        Role requiredRole = methodRole != null ? methodRole : classRole;
-
-        if (requiredRole == null) {
-            return true;
-        }
-
-        Set<String> configuredRoles = Session.getConfiguredRoles(getServletContext());
-        boolean roleConfigured = false;
-        for (String role : requiredRole.value()) {
-            if (role != null && configuredRoles.contains(role.trim().toUpperCase(java.util.Locale.ROOT))) {
-                roleConfigured = true;
-                break;
-            }
-        }
-        if (!roleConfigured) {
-            return false;
-        }
-
-        Session session = new Session(request.getSession());
-        if (session.getUser() == null) {
-            return false;
-        }
-
-        return session.hasAnyRole(getServletContext(), requiredRole.value());
     }
 }

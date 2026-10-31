@@ -1,13 +1,11 @@
 <%@ page contentType="text/html;charset=UTF-8" %>
 <!DOCTYPE html>
 <html>
-<head><title>Upload</title></head>
+<head>
+    <title>Accueil</title>
+</head>
 <body>
-  <h1>Envoyer un fichier</h1>
-  <form method="post" action="${pageContext.request.contextPath}/upload"
-        enctype="multipart/form-data">
-      <input type="file" name="filemap" required>
-      <button type="submit">Envoyer</button>
-  </form>
+    <h1>Accueil</h1>
+    <p><a href="${pageContext.request.contextPath}/session">Tester la session</a></p>
 </body>
 </html>
